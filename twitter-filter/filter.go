@@ -15,11 +15,11 @@ import (
 	"github.com/kurrik/json"
 	"github.com/kurrik/oauth1a"
 	"github.com/kurrik/twittergo"
-	"gopkg.in/yaml.v2"
 	"gopkg.in/mgo.v2"
+	"gopkg.in/yaml.v2"
 )
 
-func LoadCredentials() (client *twittergo.Client, err error) {
+func readYaml() (twitter map[interface{}]interface{}, err error) {
 	credentials, err := ioutil.ReadFile("account.yaml")
 	if err != nil {
 		return
@@ -31,15 +31,27 @@ func LoadCredentials() (client *twittergo.Client, err error) {
 
 	if err != nil {
 		log.Fatalf("error: %v", err)
+		return
 	}
 
-	twitter := m["twitter"].(map[interface{}]interface{})
+	twitter = m["twitter"].(map[interface{}]interface{})
 
 	//fmt.Printf("%v\n", twitter)
 	fmt.Printf("[%v]\n", twitter["consumerKey"])
 	fmt.Printf("[%v]\n", twitter["consumerSecret"])
 	fmt.Printf("[%v]\n", twitter["accessToken"])
 	fmt.Printf("[%v]\n", twitter["accessTokenSecret"])
+
+	return
+}
+
+func LoadCredentials() (client *twittergo.Client, err error) {
+
+	twitter, err := readYaml()
+
+	if err != nil {
+		return
+	}
 
 	config := &oauth1a.ClientConfig{
 		ConsumerKey:    twitter["consumerKey"].(string),
@@ -151,6 +163,7 @@ func Connect(client *twittergo.Client, path string, query url.Values) (resp *twi
 		req *http.Request
 	)
 	url := fmt.Sprintf("https://stream.twitter.com%v?%v", path, query.Encode())
+	fmt.Println(url)
 	req, err = http.NewRequest("GET", url, nil)
 	if err != nil {
 		err = fmt.Errorf("Could not parse request: %v\n", err)
@@ -164,7 +177,16 @@ func Connect(client *twittergo.Client, path string, query url.Values) (resp *twi
 	return
 }
 
-func filterStream(client *twittergo.Client, path string, query url.Values) (err error) {
+func tableExists(name string, tables []string) bool {
+	for _, t := range tables {
+		if name == t {
+			return true
+		}
+	}
+	return false
+}
+
+func filterStream(client *twittergo.Client, path string, dbname string, query url.Values) (err error) {
 	var (
 		resp *twittergo.APIResponse
 	)
@@ -174,6 +196,7 @@ func filterStream(client *twittergo.Client, path string, query url.Values) (err 
 
 	done := make(chan bool)
 	stream := make(chan []byte, 1000)
+
 	go func() {
 		session, err := mgo.Dial("localhost")
 		if err != nil {
@@ -181,13 +204,26 @@ func filterStream(client *twittergo.Client, path string, query url.Values) (err 
 		}
 		defer session.Close()
 		session.SetMode(mgo.Monotonic, true)
-		c := session.DB("twitter").C("fashion")
-		
+		db := session.DB("twitter")
+		colls, err := db.CollectionNames()
+
+		if err != nil {
+			panic(err)
+		}
+		c := db.C(dbname)
+
+		if !tableExists(dbname, colls) {
+			info := &mgo.CollectionInfo{}
+			c.Create(info)
+		}
+
 		for data := range stream {
 			tweet := &twittergo.Tweet{}
-			err := json.Unmarshal(data,tweet)
-			if err != nil {
-				c.Insert(&tweet)
+			fmt.Printf("%s\n", data)
+			err := json.Unmarshal(data, tweet)
+			if err == nil {
+				fmt.Printf("%s\n", tweet.Text())
+				c.Insert(tweet)
 			}
 		}
 	}()
@@ -197,10 +233,6 @@ func filterStream(client *twittergo.Client, path string, query url.Values) (err 
 	}, done)
 
 	return
-}
-
-func save2mongo(tweet string) {
-	
 }
 
 func main() {
@@ -214,19 +246,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	if len(os.Args) < 2 {
+	if len(os.Args) < 3 {
 		fmt.Printf("need args\n")
 		os.Exit(1)
 	}
 
 	query := url.Values{}
 
-	for i := 1; i < len(os.Args); i++ {
+	for i := 2; i < len(os.Args); i++ {
 		query.Add("track", os.Args[i])
 	}
+	fmt.Println(query)
 
-
-	if err = filterStream(client, "/1.1/statuses/filter.json", query); err != nil {
+	if err = filterStream(client, "/1.1/statuses/filter.json", os.Args[1], query); err != nil {
 		fmt.Printf("Error: %v\n", err)
 	}
 
