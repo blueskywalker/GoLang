@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -12,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kurrik/json"
 	"github.com/kurrik/oauth1a"
 	"github.com/kurrik/twittergo"
 	"gopkg.in/yaml.v2"
@@ -150,7 +150,7 @@ func Connect(client *twittergo.Client, path string, query url.Values) (resp *twi
 		req *http.Request
 	)
 	url := fmt.Sprintf("https://stream.twitter.com%v?%v", path, query.Encode())
-	req, err = http.NewRequest("GET", url, nil)
+	req, err = http.NewRequest("POST", url, nil)
 	if err != nil {
 		err = fmt.Errorf("Could not parse request: %v\n", err)
 		return
@@ -177,12 +177,13 @@ func filterStream(client *twittergo.Client, path string, query url.Values) (err 
 		for data := range stream {
 			tweet := &twittergo.Tweet{}
 			err := json.Unmarshal(data, tweet)
+
 			if err == nil {
 				fmt.Printf("ID:     %v\n", tweet.Id())
 				fmt.Printf("User:   %v\n", tweet.User().ScreenName())
 				fmt.Printf("Tweet:  %v\n", tweet.Text())
-
 			}
+			fmt.Printf("%s\n", data)
 		}
 	}()
 
@@ -191,6 +192,7 @@ func filterStream(client *twittergo.Client, path string, query url.Values) (err 
 	}, done)
 
 	return
+
 }
 
 func main() {
