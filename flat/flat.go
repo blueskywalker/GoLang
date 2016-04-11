@@ -25,18 +25,12 @@ func flat(list []interface{}) []interface{} {
 
 func main()  {
 
-        letters := []string{"a", "b", "c", "d","e"}
-        fmt.Println(letters)
+        lista := []interface{} {"a"}
+	listb := []interface{} {"b",lista}
+	listc := []interface{} {"c",listb}
+	listd := []interface{} {"d",listc}
+        data := []interface{} { lista, listb, listc, listd, "e"}
 
-        var data []interface{}
-	for _, value := range letters {
-		var tmp []interface{}
-		tmp = append(tmp,value)
-		if len(data) > 0 {
-			tmp = append(tmp, data)
-		}
-		data = append(data,tmp)
-	}
 	fmt.Println(data)
 	fmt.Println(flat(data))
 
